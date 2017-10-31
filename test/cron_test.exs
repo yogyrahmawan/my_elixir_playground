@@ -1,48 +1,3 @@
-"""
-parsing cron schedule 
-based on learning on dailydrip
-"""
-defmodule Cron.Schedule do 
-  defstruct [:minute, :hour, :day_of_week, :day_of_month, :month, :command]
-end
-
-defmodule Cron.Parser do 
-  def parse(string) do 
-    [minute, hour, day_of_month, month, day_of_week | command] = String.split(string)
-    cmd_str = Enum.join(command) 
-    {:ok, cmd} = Code.string_to_quoted(cmd_str)
-    parse(minute, hour, day_of_month, month, day_of_week, cmd)
-  end
-
-  def parse(minute, hour, day_of_month, month, day_of_week, command) do 
-    %Cron.Schedule{minute: parse_pattern(minute, 0..59), hour: parse_pattern(hour, 0..11), day_of_month: parse_pattern(day_of_month, 1..31), month: parse_pattern(month, 1..12), day_of_week: parse_pattern(day_of_week, 0..6), command: command}
-  end
-
-  def parse_pattern("*", range) do
-    Enum.to_list(range)
-  end
-
-  def parse_pattern("*/" <> mod, range) do
-    mod = String.to_integer(mod)
-    Enum.filter(range, fn(i) -> 
-      rem(i,mod) == 0 
-    end)
-  end
-
-  def parse_pattern(pattern, _range) do 
-    pattern 
-    |> String.split(",")
-    |> Enum.map(
-      &
-      (
-        &1 
-        |> String.to_integer
-      )
-    )
-  end 
-
-end
-
 defmodule CronTest do 
   use ExUnit.Case
 
@@ -66,4 +21,14 @@ defmodule CronTest do
   test "parsing patterns like 'every five minutes'" do
     assert Cron.Parser.parse("*/5 0 0 0 * Module.function(:arg1)") == %Cron.Schedule{minute: [0,5,10,15,20,25,30,35,40,45,50,55], hour: [0], day_of_month: [0], month: [0], day_of_week: [0,1,2,3,4,5,6], command: @command}
   end
+  
+  @tag timeout: 80000
+  test "add command" do 
+    pid_list = :erlang.pid_to_list(self)
+    Cron.add_schedule("* * * * * send(:erlang.list_to_pid(#{inspect pid_list}), :ok)")
+    :timer.sleep(30000)
+    Cron.clear_schedule
+    :timer.sleep(31000)
+    refute_received(:ok)
+  end  
 end
